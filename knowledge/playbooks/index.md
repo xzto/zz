@@ -10,6 +10,7 @@
 * [Toolchain and system prerequisites](prerequisites.md) - The exact toolchain versions and per-platform system libraries required to build zz, pinned by rust-toolchain.toml, mise.toml, and CI.
 * [Building and running zz](running-zz.md) - How to build and run the zz GPUI client and its daemon, what the first build downloads, and how to exercise the browser pane with the loopback fixture.
 * [Working with the zz storybook](storybook.md) - Run the zz-ui storybook, add a story, change a look and check it in every theme, and drive or screenshot it from an agent.
+* [Cross-compiling headless zz for Termux](termux-headless-cross-build.md) - Build the aarch64 Termux CLI on a Linux x86_64 host using Termux NDK sysroot packages.
 * [Running tmux compatibility cohorts](tmux-compat-cohorts.md) - A bounded, parallel workflow for closing the practical alias tmux=zz gap without letting new oracle findings extend one campaign forever.
 * [Running the TUI parity campaign](tui-parity-campaign.md) - Run the TUI parity campaign: the ledger, the proof surfaces, and the worker, reviewer, and gate cycle that turns measurements into verified obligations.
 * [Updating the CEF pin](updating-cef.md) - The coordinated steps required to bump zz's CEF dependency, refresh its artifact reference and cache key, and run all three platform bundle smoke tests.

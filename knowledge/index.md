@@ -27,7 +27,7 @@ there before acting, because source is the ground truth and these pages are a ma
 | [concepts](concepts/index.md) | Cross-cutting: Agent pane, PTY worker, terminal frame, split-pane layout, session persistence, command palette |
 | [configuration](configuration/index.md) | Application configuration and [UI design conventions](configuration/ui-conventions.md) |
 | [designs](designs/index.md) | Feature plans and decision records, each carrying a `status:` field |
-| [playbooks](playbooks/index.md) | Prerequisites, running zz, building/updating the CEF bundle, updating the tmux reference |
+| [playbooks](playbooks/index.md) | Prerequisites, running zz, CEF builds, Termux cross-builds, and tmux reference updates |
 | [research](research/index.md) | Dated investigations that preserve reproduction evidence, source analysis, and unresolved proof gaps |
 | [references](references/index.md) | External pins: CEF artifacts, GPUI revision, tmux upstream, Ghostty colors |
 

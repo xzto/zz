@@ -18,6 +18,8 @@ in the repo; when a pin moves, it moves here too. See [running zz](/playbooks/ru
 build/run commands and [building a CEF bundle](/playbooks/build-cef-bundle.md) for the CEF-specific
 flow that consumes CMake/Ninja.
 
+For a Linux x86_64 headless Android/Termux build, follow [Cross-compiling headless zz for Termux](/playbooks/termux-headless-cross-build.md).
+
 # Schema
 
 | Requirement | Pin / version | Checked against | Why it's needed |
