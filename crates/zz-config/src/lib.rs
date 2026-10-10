@@ -26,6 +26,7 @@ pub mod update;
 
 pub const CONFIG_DIRECTORY_NAME: &str = zz_protocol::app_identity::DIRECTORY;
 pub const CONFIG_FILE_NAME: &str = "config";
+pub const CONFIG_LOCAL_FILE_NAME: &str = "config.local";
 pub const MAX_CONFIG_BYTES: usize = 64 * 1024;
 
 pub const MAX_PANE_MARGIN: f32 = 32.0;
@@ -628,6 +629,8 @@ pub struct ConfigFileStamp {
     pub path: Option<PathBuf>,
     pub modified: Option<SystemTime>,
     pub len: Option<u64>,
+    pub local_modified: Option<SystemTime>,
+    pub local_len: Option<u64>,
 }
 
 impl ConfigFileStamp {
@@ -636,11 +639,16 @@ impl ConfigFileStamp {
             return Self::default();
         };
         let metadata = fs::metadata(&path).ok();
+        let local_metadata = fs::metadata(config_local_path(&path)).ok();
         Self {
             modified: metadata
                 .as_ref()
                 .and_then(|metadata| metadata.modified().ok()),
             len: metadata.as_ref().map(fs::Metadata::len),
+            local_modified: local_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.modified().ok()),
+            local_len: local_metadata.as_ref().map(fs::Metadata::len),
             path: Some(path),
         }
     }
@@ -796,7 +804,31 @@ pub fn nonempty_env(name: &str) -> Option<PathBuf> {
 }
 
 pub fn load_config(path: &Path, system_font_family: &str) -> io::Result<ParsedConfig> {
-    read_config_source(path).map(|source| parse_config(&source, system_font_family))
+    let mut source = read_config_source(path)?;
+    let local_path = config_local_path(path);
+    match read_config_source(&local_path) {
+        Ok(local) => {
+            if source.len().saturating_add(local.len()) > MAX_CONFIG_BYTES {
+                return Err(io::Error::new(
+                    ErrorKind::InvalidData,
+                    format!(
+                        "configuration and local overrides exceed the {MAX_CONFIG_BYTES}-byte limit"
+                    ),
+                ));
+            }
+            if !source.is_empty() && !source.ends_with('\n') {
+                source.push('\n');
+            }
+            source.push_str(&local);
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    Ok(parse_config(&source, system_font_family))
+}
+
+fn config_local_path(path: &Path) -> PathBuf {
+    path.with_file_name(CONFIG_LOCAL_FILE_NAME)
 }
 
 pub fn read_config_source(path: &Path) -> io::Result<String> {
@@ -1936,6 +1968,28 @@ pub fn config_overrides_for_host(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn config_local_is_loaded_after_main_config_and_is_watched() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join(CONFIG_FILE_NAME);
+        let local_path = root.path().join(CONFIG_LOCAL_FILE_NAME);
+        fs::write(&path, "palette-show-keys = on\n").unwrap();
+
+        let parsed = load_config(&path, "monospace").unwrap();
+        assert!(parsed.config.palette_show_keys.value);
+        let without_local = ConfigFileStamp::detect(std::slice::from_ref(&path));
+
+        fs::write(&local_path, "palette-show-keys = off\n").unwrap();
+        let parsed = load_config(&path, "monospace").unwrap();
+        assert!(!parsed.config.palette_show_keys.value);
+        let with_local = ConfigFileStamp::detect(std::slice::from_ref(&path));
+        assert_ne!(without_local, with_local);
+        assert_eq!(
+            with_local.local_len,
+            Some("palette-show-keys = off\n".len() as u64)
+        );
+    }
 
     #[test]
     fn palette_preferences_validate_and_preserve_hash_prefix() {

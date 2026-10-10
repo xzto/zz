@@ -15,7 +15,10 @@ timestamp: 2026-09-22T00:00:00Z
 # Overview
 
 The GUI process loads the first existing `zz/config` file from the user's platform configuration
-roots. `crates/zz/src/config/mod.rs` resolves the candidates when `run_app` enters the GPUI application
+roots, then appends the adjacent optional `config.local` as overrides. Keep machine-specific values
+in `config.local`; settings and import actions continue to edit only `config`. `config.local` is
+re-read and live-applied when it changes. The combined input is capped at 64 KiB.
+`crates/zz/src/config/mod.rs` resolves the candidates when `run_app` enters the GPUI application
 closure, parses named client-local behavior/layout/theme/browser knobs plus
 chrome-color entries into typed
 `AppConfig`, `BrowserConfig`, and `UiFontConfig` values, parses the one app-owned ACP key into `AgentConfig`,
@@ -61,9 +64,10 @@ Settings accepts any donor path and keeps structured rows above the editor for t
 | Windows | `%XDG_CONFIG_HOME%\zz\config`, `%APPDATA%\zz\config`, `%LOCALAPPDATA%\zz\config`, `%USERPROFILE%\.config\zz\config`, then `%HOME%\.config\zz\config` |
 
 Only absolute configuration roots are accepted, as required for `XDG_CONFIG_HOME`; duplicate paths
-are removed while retaining precedence. A missing file or unavailable configuration root silently
-selects built-in defaults. Other I/O or UTF-8 errors warn and select defaults. Reads are capped at
-64 KiB before parsing so an accidentally large file cannot create unbounded configuration work.
+are removed while retaining precedence. A missing main file or unavailable configuration root
+silently selects built-in defaults. If the main file exists, a missing `config.local` is ignored;
+other I/O or UTF-8 errors warn and select defaults. The combined files are capped at 64 KiB before
+parsing so accidentally large configuration cannot create unbounded work.
 
 When a settings edit must create the file, it uses the first available absolute root in the
 platform search order above and creates parent directories as needed. On Windows without an

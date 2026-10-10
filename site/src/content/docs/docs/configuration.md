@@ -3,14 +3,17 @@ title: Configuration
 description: Appearance settings and tmux configuration with zz-specific overrides.
 ---
 
-Keep zz-specific settings in two plain-text files:
+Keep zz-specific settings in these plain-text files:
 
 | File | Format | Covers |
 | --- | --- | --- |
-| `~/.config/zz/config` | Ghostty-style `key = value` | appearance: fonts, colors, themes, padding, opacity |
+| `~/.config/zz/config` | Ghostty-style `key = value` | shared appearance and application settings |
+| `~/.config/zz/config.local` | Ghostty-style `key = value` | optional machine-specific overrides |
 | `~/.config/zz/mux.conf` | tmux syntax | overrides for prefix, key bindings, mux options |
 
-Both are picked up without a restart.
+Changes to these files are picked up without a restart. `config.local` is optional and loaded after
+`config`, so its values override matching settings there. Settings and import actions write only to
+`config`, leaving local overrides untouched. The combined config input is limited to 64 KiB.
 
 ## One-shot import
 
