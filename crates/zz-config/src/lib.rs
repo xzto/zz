@@ -1894,16 +1894,22 @@ pub fn append_config_line(source: &str, key: &str, value: &str) -> String {
 }
 
 pub fn atomic_write(path: &Path, contents: &[u8]) -> io::Result<()> {
-    let parent = path.parent().ok_or_else(|| {
+    let write_path = match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => fs::canonicalize(path)?,
+        Ok(_) => path.to_path_buf(),
+        Err(error) if error.kind() == ErrorKind::NotFound => path.to_path_buf(),
+        Err(error) => return Err(error),
+    };
+    let parent = write_path.parent().ok_or_else(|| {
         io::Error::new(
             ErrorKind::InvalidInput,
             "configuration path has no parent directory",
         )
     })?;
     fs::create_dir_all(parent)?;
-    let (temporary_path, mut temporary_file) = create_config_temp_file(path, parent)?;
+    let (temporary_path, mut temporary_file) = create_config_temp_file(&write_path, parent)?;
     let write_result = (|| {
-        if let Ok(metadata) = fs::metadata(path) {
+        if let Ok(metadata) = fs::metadata(&write_path) {
             temporary_file.set_permissions(metadata.permissions())?;
         }
         temporary_file.write_all(contents)?;
@@ -1915,7 +1921,7 @@ pub fn atomic_write(path: &Path, contents: &[u8]) -> io::Result<()> {
         let _ = fs::remove_file(&temporary_path);
         return Err(error);
     }
-    if let Err(error) = fs::rename(&temporary_path, path) {
+    if let Err(error) = fs::rename(&temporary_path, &write_path) {
         let _ = fs::remove_file(&temporary_path);
         return Err(error);
     }
@@ -1988,6 +1994,31 @@ mod tests {
         assert_eq!(
             with_local.local_len,
             Some("palette-show-keys = off\n".len() as u64)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn config_edits_preserve_file_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("dotfiles-config");
+        let path = root.path().join(CONFIG_FILE_NAME);
+        fs::write(&target, "palette-show-keys = on\n").unwrap();
+        symlink(&target, &path).unwrap();
+
+        write_config_edit_at(&path, "palette-show-keys", Some("off")).unwrap();
+
+        assert!(
+            fs::symlink_metadata(&path)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(
+            fs::read_to_string(&target).unwrap(),
+            "palette-show-keys = off\n"
         );
     }
 
