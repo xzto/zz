@@ -82,7 +82,7 @@ fn unix_host_name() -> Option<String> {
     String::from_utf8(buffer[..end].to_vec()).ok()
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "android"))]
 #[allow(unsafe_code, clippy::undocumented_unsafe_blocks)]
 fn unix_terminate(pid: u32) -> bool {
     libc::pid_t::try_from(pid)
@@ -769,7 +769,7 @@ mod platform {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 mod platform {
     use std::{
         collections::BTreeMap,
@@ -1169,7 +1169,12 @@ mod platform {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "android",
+    windows
+)))]
 mod platform {
     use std::path::PathBuf;
 

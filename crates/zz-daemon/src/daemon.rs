@@ -53734,7 +53734,7 @@ fn missing_source_error(path: &Path) -> String {
     format!("No such file or directory: {}", path.display())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 #[allow(unsafe_code, clippy::undocumented_unsafe_blocks)]
 fn source_glob_matches(path: &Path) -> SourceGlobMatches {
     use std::{
@@ -53777,7 +53777,7 @@ fn source_glob_matches(path: &Path) -> SourceGlobMatches {
     matches
 }
 
-#[cfg(not(unix))]
+#[cfg(any(not(unix), target_os = "android"))]
 fn source_glob_matches(path: &Path) -> SourceGlobMatches {
     match glob::glob(path.to_string_lossy().as_ref()) {
         Ok(paths) => {

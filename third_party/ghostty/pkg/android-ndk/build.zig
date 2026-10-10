@@ -38,6 +38,24 @@ pub fn addPaths(b: *std.Build, step: *std.Build.Step.Compile) !void {
     });
 
     if (!gop.found_existing) {
+        if (builtin.os.tag == .linux and builtin.abi == .android) {
+            const prefix = b.graph.environ_map.get("PREFIX") orelse return error.AndroidNDKNotFound;
+            const include_dir = b.pathJoin(&.{ prefix, "include" });
+            const libc_txt = b.fmt(
+                \\include_dir={s}
+                \\sys_include_dir={s}
+                \\crt_dir={s}
+                \\msvc_lib_dir=
+                \\kernel32_lib_dir=
+                \\gcc_dir=
+            , .{ include_dir, b.pathJoin(&.{ include_dir, "aarch64-linux-android" }), b.pathJoin(&.{ b.graph.environ_map.get("HOME") orelse return error.AndroidNDKNotFound, "opt", "zz", "android-lib" }) });
+            const wf = b.addWriteFiles();
+            gop.value_ptr.* = .{
+                .libc = wf.add("libc.txt", libc_txt),
+                .cpp_include = .{ .cwd_relative = b.pathJoin(&.{ prefix, "include", "c++", "v1" }) },
+                .lib = .{ .cwd_relative = b.pathJoin(&.{ b.graph.environ_map.get("HOME") orelse return error.AndroidNDKNotFound, "opt", "zz", "android-lib" }) },
+            };
+        } else {
         const ndk_path = findNDKPath(b) orelse return error.AndroidNDKNotFound;
 
         const ndk_triple = ndkTriple(target) orelse {
@@ -107,6 +125,7 @@ pub fn addPaths(b: *std.Build, step: *std.Build.Step.Compile) !void {
             .cpp_include = .{ .cwd_relative = cpp_include },
             .lib = .{ .cwd_relative = lib },
         };
+        }
     }
 
     const value = gop.value_ptr.* orelse return error.AndroidNDKNotFound;

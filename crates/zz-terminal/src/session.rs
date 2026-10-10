@@ -14032,7 +14032,58 @@ fn child_pid(process_id: Option<u32>) -> Result<rustix::process::Pid, WorkerErro
         .ok_or_else(|| WorkerError::Spawn("the spawned child has no process id".to_owned()))
 }
 
-#[cfg(all(unix, not(target_os = "linux")))]
+#[cfg(target_os = "android")]
+struct ChildExitWatch {
+    read: std::os::fd::OwnedFd,
+    exit: Receiver<std::io::Result<ExitStatus>>,
+    reaped: bool,
+}
+
+#[cfg(target_os = "android")]
+impl ChildExitWatch {
+    fn new(process_id: Option<u32>) -> Result<Self, WorkerError> {
+        let pid = child_pid(process_id)?;
+        let (read, write) = std::os::unix::net::UnixStream::pair().map_err(WorkerError::Io)?;
+        let (exit_tx, exit) = crossbeam_channel::bounded(1);
+        thread::Builder::new()
+            .name("zz-child-wait".into())
+            .spawn(move || {
+                let status = reap_child(pid, true).unwrap_or_else(|| {
+                    Err(std::io::Error::other("the pane child was reaped elsewhere"))
+                });
+                let _ = exit_tx.send(status);
+                let _ = rustix::io::write(&write, &[1]);
+            })
+            .map_err(WorkerError::Io)?;
+        Ok(Self {
+            read: read.into(),
+            exit,
+            reaped: false,
+        })
+    }
+
+    fn poll_fd(&self) -> Option<&std::os::fd::OwnedFd> {
+        (!self.reaped).then_some(&self.read)
+    }
+
+    fn take_ready(&mut self) -> Option<std::io::Result<ExitStatus>> {
+        let status = self.exit.try_recv().ok()?;
+        self.reaped = true;
+        Some(status)
+    }
+
+    fn on_readable(&mut self) -> Option<std::io::Result<ExitStatus>> {
+        self.take_ready()
+    }
+
+    fn wait_timeout(&mut self, timeout: Duration) -> Option<std::io::Result<ExitStatus>> {
+        let status = self.exit.recv_timeout(timeout).ok()?;
+        self.reaped = true;
+        Some(status)
+    }
+}
+
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
 struct ChildExitWatch {
     pid: rustix::process::Pid,
     kqueue: Option<std::os::fd::OwnedFd>,
@@ -14042,7 +14093,7 @@ struct ChildExitWatch {
     retry: Option<Instant>,
 }
 
-#[cfg(all(unix, not(target_os = "linux")))]
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
 impl ChildExitWatch {
     #[cfg(target_os = "macos")]
     fn for_shard(process_id: Option<u32>) -> Result<Self, WorkerError> {
@@ -14181,7 +14232,7 @@ impl ChildExitWatch {
     }
 }
 
-#[cfg(all(unix, not(target_os = "linux")))]
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
 impl Drop for ChildExitWatch {
     fn drop(&mut self) {
         if self.reaped || reap_child(self.pid, false).is_some() {
