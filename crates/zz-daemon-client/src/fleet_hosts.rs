@@ -35,7 +35,7 @@ pub fn configured_fleet_hosts() -> io::Result<(Vec<HostEntry>, Vec<RejectedHost>
     let Some(path) = discover_config_path(&candidates) else {
         return Ok((Vec::new(), Vec::new()));
     };
-    read_config_source(&path).map(|source| parse_fleet_hosts(&source))
+    crate::expand_config_file(&path).map(|expanded| parse_fleet_hosts(&expanded.source))
 }
 
 /// Validate one `host-<name>` entry and write it to `zz/config` with an atomic rename.

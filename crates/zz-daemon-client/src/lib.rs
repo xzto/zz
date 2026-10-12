@@ -25,6 +25,7 @@ pub const COLD_START_PREPARE_ABORT_COMMAND: &str = "__zz-cold-start-prepare-abor
 #[cfg_attr(target_os = "ios", allow(dead_code))]
 mod askpass;
 mod client;
+mod config_file;
 #[cfg_attr(target_os = "ios", allow(dead_code))]
 mod endpoint;
 mod fleet_hosts;
@@ -63,6 +64,7 @@ pub use client::{
     CommandClient, CommandOutcome, ExecChain, ExecChainEnd, ExecClassifier, InteractiveClient,
     short_device_name,
 };
+pub use config_file::{ConfigSource, declared_include_paths, expand_config_file};
 pub use endpoint::{Endpoint, EndpointError, SshEndpoint, run_socket_proxy, shell_quote};
 pub use fleet_hosts::{
     HostEntry, RejectedHost, apply_fleet_host_entry, atomic_write, configured_fleet_hosts,

@@ -10,7 +10,18 @@ Keep zz-specific settings in two plain-text files:
 | `~/.config/zz/config` | Ghostty-style `key = value` | appearance: fonts, colors, themes, padding, opacity |
 | `~/.config/zz/mux.conf` | tmux syntax | overrides for prefix, key bindings, mux options |
 
-Both are picked up without a restart.
+Both are picked up without a restart. To split `config`, add an include at the point where you
+want its settings applied:
+
+```config
+include = config.local
+include = -optional.conf
+```
+
+The first line requires `config.local`; a missing file raises a load error. The `-` prefix lets zz
+skip a missing file. Relative paths resolve beside the file containing the include. You can nest
+includes up to 16 levels; zz rejects cycles. Changes to included files also trigger a reload.
+Without an include, zz does not read `config.local`.
 
 ## One-shot import
 

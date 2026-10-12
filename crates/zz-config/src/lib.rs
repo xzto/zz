@@ -623,11 +623,17 @@ impl fmt::Display for ImportError {
 
 impl std::error::Error for ImportError {}
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ConfigFileState {
+    pub path: PathBuf,
+    pub modified: Option<SystemTime>,
+    pub len: Option<u64>,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ConfigFileStamp {
     pub path: Option<PathBuf>,
-    pub modified: Option<SystemTime>,
-    pub len: Option<u64>,
+    pub files: Vec<ConfigFileState>,
 }
 
 impl ConfigFileStamp {
@@ -635,13 +641,24 @@ impl ConfigFileStamp {
         let Some(path) = discover_config_path(candidates) else {
             return Self::default();
         };
-        let metadata = fs::metadata(&path).ok();
+        let mut paths = zz_daemon_client::declared_include_paths(&path);
+        paths.dedup();
+        let files = paths
+            .into_iter()
+            .map(|path| {
+                let metadata = fs::metadata(&path).ok();
+                ConfigFileState {
+                    modified: metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.modified().ok()),
+                    len: metadata.as_ref().map(fs::Metadata::len),
+                    path,
+                }
+            })
+            .collect();
         Self {
-            modified: metadata
-                .as_ref()
-                .and_then(|metadata| metadata.modified().ok()),
-            len: metadata.as_ref().map(fs::Metadata::len),
             path: Some(path),
+            files,
         }
     }
 }
@@ -796,7 +813,8 @@ pub fn nonempty_env(name: &str) -> Option<PathBuf> {
 }
 
 pub fn load_config(path: &Path, system_font_family: &str) -> io::Result<ParsedConfig> {
-    read_config_source(path).map(|source| parse_config(&source, system_font_family))
+    zz_daemon_client::expand_config_file(path)
+        .map(|expanded| parse_config(&expanded.source, system_font_family))
 }
 
 pub fn read_config_source(path: &Path) -> io::Result<String> {
@@ -863,6 +881,10 @@ pub fn parse_config(source: &str, system_font_family: &str) -> ParsedConfig {
         };
         let key = key.trim();
         let value = config_value_without_comment(value).trim();
+
+        if key == "include" {
+            continue;
+        }
 
         if let Some(name) = key.strip_prefix("host-") {
             if let Some(message) = zz_daemon_client::apply_fleet_host_entry(
@@ -1942,6 +1964,87 @@ pub fn config_overrides_for_host(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn include_is_explicit_and_watched() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config");
+        let included = root.path().join("config.local");
+        fs::write(&path, "palette-show-keys = on\n").unwrap();
+        fs::write(&included, "palette-show-keys = off\n").unwrap();
+        assert!(
+            load_config(&path, "monospace")
+                .unwrap()
+                .config
+                .palette_show_keys
+                .value
+        );
+
+        fs::write(&path, "palette-show-keys = on\ninclude = config.local\n").unwrap();
+        assert!(
+            !load_config(&path, "monospace")
+                .unwrap()
+                .config
+                .palette_show_keys
+                .value
+        );
+        let before = ConfigFileStamp::detect(std::slice::from_ref(&path));
+        fs::write(&included, "palette-show-keys = on\n").unwrap();
+        assert_ne!(before, ConfigFileStamp::detect(std::slice::from_ref(&path)));
+    }
+
+    #[test]
+    fn optional_missing_include_is_watched() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config");
+        let missing = root.path().join("ignore-missing.config");
+        fs::write(
+            &path,
+            "palette-show-keys = on\ninclude = -ignore-missing.config\n",
+        )
+        .unwrap();
+        assert!(
+            load_config(&path, "monospace")
+                .unwrap()
+                .config
+                .palette_show_keys
+                .value
+        );
+        let before = ConfigFileStamp::detect(std::slice::from_ref(&path));
+        fs::write(&missing, "palette-show-keys = off\n").unwrap();
+        assert_ne!(before, ConfigFileStamp::detect(std::slice::from_ref(&path)));
+        assert!(
+            !load_config(&path, "monospace")
+                .unwrap()
+                .config
+                .palette_show_keys
+                .value
+        );
+    }
+
+    #[test]
+    fn missing_includes_trigger_reload_when_created() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config");
+        let nested = root.path().join("nested");
+        let missing = root.path().join("missing");
+        fs::write(&path, "include = -nested\n").unwrap();
+        fs::write(&nested, "include = missing\n").unwrap();
+        assert_eq!(
+            load_config(&path, "monospace").unwrap_err().kind(),
+            ErrorKind::NotFound
+        );
+        let before = ConfigFileStamp::detect(std::slice::from_ref(&path));
+        fs::write(&missing, "palette-show-keys = off\n").unwrap();
+        assert_ne!(before, ConfigFileStamp::detect(std::slice::from_ref(&path)));
+        assert!(
+            !load_config(&path, "monospace")
+                .unwrap()
+                .config
+                .palette_show_keys
+                .value
+        );
+    }
 
     #[cfg(unix)]
     #[test]

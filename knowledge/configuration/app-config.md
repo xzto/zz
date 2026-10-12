@@ -15,8 +15,11 @@ timestamp: 2026-09-22T00:00:00Z
 # Overview
 
 The GUI process loads the first existing `zz/config` file from the user's platform configuration
-roots. `crates/zz/src/config/mod.rs` resolves the candidates when `run_app` enters the GPUI application
-closure, parses named client-local behavior/layout/theme/browser knobs plus
+roots. It reads `config.local` only when `config` names it with `include = config.local`.
+Use `include = -optional.conf` to allow a missing file. Relative paths resolve beside the file
+containing the directive; absolute paths also work. Nested includes stop at 16 levels, and a cycle
+or missing required file raises an error. `crates/zz/src/config/mod.rs` resolves the candidates when
+`run_app` enters the GPUI application closure, parses named client-local behavior/layout/theme/browser knobs plus
 chrome-color entries into typed
 `AppConfig`, `BrowserConfig`, and `UiFontConfig` values, parses the one app-owned ACP key into `AgentConfig`,
 collects repeatable `chrome-keybind`/`chrome-unbind` entries for the client-local keymap, and collects the supported
@@ -63,7 +66,8 @@ Settings accepts any donor path and keeps structured rows above the editor for t
 Only absolute configuration roots are accepted, as required for `XDG_CONFIG_HOME`; duplicate paths
 are removed while retaining precedence. A missing file or unavailable configuration root silently
 selects built-in defaults. Other I/O or UTF-8 errors warn and select defaults. Reads are capped at
-64 KiB before parsing so an accidentally large file cannot create unbounded configuration work.
+64 KiB per file and for the expanded input. The GUI watches included paths, including missing ones,
+for changes.
 
 When a settings edit must create the file, it uses the first available absolute root in the
 platform search order above and creates parent directories as needed. On Windows without an
