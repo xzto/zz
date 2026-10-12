@@ -32288,7 +32288,22 @@ impl Shared {
         if routed_name == "source-file" && !caller_source_stream {
             let source_effects = {
                 let mut inner = self.inner.lock();
-                inner.engine.execute_prepared(context, &routed)
+                // The frame's context carries `current_file`, so `-F` in a
+                // sourced file resolves it. `execute_prepared` would use
+                // variable-blind hooks and expand it to nothing.
+                let format_variables = context.format_variables.clone();
+                let (engine, facts) =
+                    split_borrowed_format_hook_facts(&mut inner, CommandFormatSeed::default());
+                let mut hooks = DaemonFormatHooks::command_with_optional_variables(
+                    &facts,
+                    (!format_variables.is_empty()).then_some(&format_variables),
+                );
+                engine.execute_without_alias_expansion(
+                    context,
+                    &routed,
+                    &mut hooks,
+                    &mut |_| true,
+                )
             };
             let source_effects = match source_effects {
                 Ok(execution) => execution

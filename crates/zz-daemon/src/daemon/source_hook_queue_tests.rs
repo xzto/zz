@@ -238,3 +238,31 @@ fn nested_source_batch_keeps_construction_and_parse_warnings_in_file_order() {
     assert!(warnings[0].starts_with(&first.display().to_string()));
     assert!(warnings[1].starts_with(&second.display().to_string()));
 }
+
+#[cfg(unix)]
+#[test]
+fn source_file_expands_current_file_in_its_own_path() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("root.conf");
+    let child = directory.path().join("child.conf");
+    fs::write(&child, "display-message -p child\n").unwrap();
+    fs::write(&root, "source-file -F \"#{d:current_file}/child.conf\"\n").unwrap();
+    let shared = Arc::new(Shared::new(307));
+    let (client, _) =
+        shared.register_subscribed(ClientKind::Command, None, None, OutboundMailbox::new());
+    let mut context = ExecutionContext::default();
+
+    let response = shared.execute_command_request(
+        client,
+        ClientKind::Command,
+        &mut context,
+        1,
+        &CommandInvocation::new("source-file", [root.display().to_string()]),
+    );
+
+    assert!(
+        matches!(&response, CommandResponse::Success { output, exit_code: 0, .. }
+        if output == "child\n"),
+        "response: {response:?}"
+    );
+}
